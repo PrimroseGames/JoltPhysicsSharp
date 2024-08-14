@@ -43,7 +43,11 @@
 typedef uint32_t JPH_Bool32;
 typedef uint32_t JPH_BodyID;
 typedef uint32_t JPH_SubShapeID;
+#if JPH_OBJECT_LAYER_BITS == 32
+typedef uint32_t JPH_ObjectLayer;
+#elif JPH_OBJECT_LAYER_BITS == 16
 typedef uint16_t JPH_ObjectLayer;
+#endif
 typedef uint8_t  JPH_BroadPhaseLayer;
 
 typedef enum JPH_PhysicsUpdateError {
@@ -702,10 +706,13 @@ JPH_CAPI void JPH_MeshShapeSettings_Sanitize(JPH_MeshShapeSettings* settings);
 JPH_CAPI JPH_MeshShape* JPH_MeshShapeSettings_CreateShape(const JPH_MeshShapeSettings* settings);
 
 /* HeightFieldShape */
-JPH_CAPI JPH_HeightFieldShapeSettings* JPH_HeightFieldShapeSettings_Create(const float* samples, const JPH_Vec3* offset, const JPH_Vec3* scale, uint32_t sampleCount);
+JPH_CAPI JPH_HeightFieldShapeSettings* JPH_HeightFieldShapeSettings_Create(const float* samples, const uint8_t* materialIndices, const JPH_Vec3* offset, const JPH_PhysicsMaterial** materialListPtr, const uint8_t materialListCount, const JPH_Vec3* scale, uint32_t sampleCount, uint32_t blockSize);
 JPH_CAPI JPH_HeightFieldShape* JPH_HeightFieldShapeSettings_CreateShape(JPH_HeightFieldShapeSettings* settings);
 JPH_CAPI void JPH_HeightFieldShapeSettings_DetermineMinAndMaxSample(const JPH_HeightFieldShapeSettings* settings, float* pOutMinValue, float* pOutMaxValue, float* pOutQuantizationScale);
 JPH_CAPI uint32_t JPH_HeightFieldShapeSettings_CalculateBitsPerSampleForError(const JPH_HeightFieldShapeSettings* settings, float maxError);
+
+JPH_CAPI JPH_PhysicsMaterial* JPH_PhysicsMaterialSimple_Create(const char* nameUtf8Ptr, const JPH_Vec3* inColour);
+JPH_CAPI void JPH_PhysicsMaterialSimple_GetName(const JPH_PhysicsMaterial* material, const char** name);
 
 /* TaperedCapsuleShape */
 JPH_CAPI JPH_TaperedCapsuleShapeSettings* JPH_TaperedCapsuleShapeSettings_Create(float halfHeightOfTaperedCylinder, float topRadius, float bottomRadius);

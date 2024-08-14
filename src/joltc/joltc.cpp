@@ -57,6 +57,7 @@ JPH_SUPPRESS_WARNINGS
 #include "Jolt/Physics/Constraints/SixDOFConstraint.h"
 #include "Jolt/Physics/Character/CharacterBase.h"
 #include "Jolt/Physics/Character/CharacterVirtual.h"
+#include "Jolt/Physics/Collision/PhysicsMaterialSimple.h"
 
 #include <iostream>
 #include <cstdarg>
@@ -392,6 +393,7 @@ void JPH_SetAssertFailureHandler(JPH_AssertFailureFunc handler)
 JPH_BroadPhaseLayerInterface* JPH_BroadPhaseLayerInterfaceMask_Create(uint32_t numBroadPhaseLayers)
 {
     auto system = new BroadPhaseLayerInterfaceMask(numBroadPhaseLayers);
+    JPH_ASSERT(system->GetNumBroadPhaseLayers() == numBroadPhaseLayers);
     return reinterpret_cast<JPH_BroadPhaseLayerInterface*>(system);
 }
 
@@ -1161,9 +1163,17 @@ JPH_MeshShape* JPH_MeshShapeSettings_CreateShape(const JPH_MeshShapeSettings* se
 }
 
 /* HeightFieldShapeSettings */
-JPH_HeightFieldShapeSettings* JPH_HeightFieldShapeSettings_Create(const float* samples, const JPH_Vec3* offset, const JPH_Vec3* scale, uint32_t sampleCount)
+JPH_HeightFieldShapeSettings* JPH_HeightFieldShapeSettings_Create(const float* samples, const uint8_t* materialIndices, const JPH_Vec3* offset, const JPH_PhysicsMaterial** materialListPtr, const uint8_t materialListCount, const JPH_Vec3* scale, uint32_t sampleCount, uint32_t blockSize)
 {
-    auto settings = new JPH::HeightFieldShapeSettings(samples, ToJolt(offset), ToJolt(scale), sampleCount);
+    PhysicsMaterialList joltMaterials;
+    joltMaterials.reserve(materialListCount);
+    for (uint32_t i = 0; i < materialListCount; ++i)
+    {
+        auto joltMaterial = materialListPtr[i];
+        joltMaterials.push_back(reinterpret_cast<const JPH::PhysicsMaterial*>(joltMaterial));
+    }
+
+    auto settings = new JPH::HeightFieldShapeSettings(samples, ToJolt(offset), ToJolt(scale), sampleCount, materialIndices, joltMaterials);
     settings->AddRef();
 
     return reinterpret_cast<JPH_HeightFieldShapeSettings*>(settings);
@@ -1198,6 +1208,21 @@ uint32_t JPH_HeightFieldShapeSettings_CalculateBitsPerSampleForError(const JPH_H
     JPH_ASSERT(settings != nullptr);
 
     return reinterpret_cast<const JPH::HeightFieldShapeSettings*>(settings)->CalculateBitsPerSampleForError(maxError);
+}
+
+/* PhysicsMaterialSimple */
+JPH_PhysicsMaterial* JPH_PhysicsMaterialSimple_Create(const char* nameUtf8Ptr, const JPH_Vec3* inColour)
+{
+    const auto nameUtf8View = JPH::string_view(nameUtf8Ptr, strlen(nameUtf8Ptr));
+    auto material = new JPH::PhysicsMaterialSimple(nameUtf8View, ColorArg(inColour->x * 255, inColour->y * 255, inColour->z * 255));
+    material->AddRef();
+    return reinterpret_cast<JPH_PhysicsMaterial*>(material);
+}
+
+void JPH_PhysicsMaterialSimple_GetName(const JPH_PhysicsMaterial* material, const char** name)
+{
+    JPH_ASSERT(material);
+    *name = reinterpret_cast<const JPH::PhysicsMaterialSimple*>(material)->GetDebugName();
 }
 
 /* TaperedCapsuleShapeSettings */
@@ -4029,6 +4054,7 @@ JPH_Bool32 JPH_NarrowPhaseQuery_CastRay2(const JPH_NarrowPhaseQuery* query,
 
     JPH::RRayCast ray(ToJolt(origin), ToJolt(direction));
     RayCastSettings ray_settings;
+    ray_settings.mBackFaceMode = EBackFaceMode::CollideWithBackFaces;
     CastRayCollectorCallback collector(callback, userData);
 
     joltQuery->CastRay(
