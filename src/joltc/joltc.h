@@ -250,12 +250,28 @@ typedef struct JPH_Vec3 {
     float z;
 } JPH_Vec3;
 
+typedef struct JPH_Vec2 {
+    float x;
+    float y;
+} JPH_Vec2;
+
 typedef struct JPH_Vec4 {
     float x;
     float y;
     float z;
     float w;
 } JPH_Vec4;
+
+typedef union JPH_Color {
+    uint32_t				mU32;																	///< Combined value for red, green, blue and alpha
+    struct
+    {
+        uint8_t			r;																		///< Red channel
+        uint8_t			g;																		///< Green channel
+        uint8_t			b;																		///< Blue channel
+        uint8_t			a;																		///< Alpha channel
+    };
+} JPH_Color;
 
 typedef struct JPH_Quat {
     float x;
@@ -305,6 +321,38 @@ typedef struct JPH_Triangle {
     JPH_Vec3 v3;
     uint32_t materialIndex;
 } JPH_Triangle;
+
+typedef struct JPH_Vertex {
+    JPH_Vec3							mPosition;
+    JPH_Vec3							mNormal;
+    JPH_Vec2							mUV;
+    JPH_Color							mColor;
+} JPH_Vertex;
+
+typedef struct JPH_BodyManager_DrawSettings
+{
+	bool						mDrawGetSupportFunction = false;
+	bool						mDrawSupportDirection = false;
+	bool						mDrawGetSupportingFace = false;
+	bool						mDrawShape = true;
+	bool						mDrawShapeWireframe = false;
+	uint32_t					mDrawShapeColor;
+	bool						mDrawBoundingBox = false;
+	bool						mDrawCenterOfMassTransform = false;
+	bool						mDrawWorldTransform = false;
+	bool						mDrawVelocity = false;
+	bool						mDrawMassAndInertia = false;
+	bool						mDrawSleepStats = false;
+	bool						mDrawSoftBodyVertices = false;
+	bool						mDrawSoftBodyVertexVelocities = false;
+	bool						mDrawSoftBodyEdgeConstraints = false;
+	bool						mDrawSoftBodyBendConstraints = false;
+	bool						mDrawSoftBodyVolumeConstraints = false;
+	bool						mDrawSoftBodySkinConstraints = false;
+	bool						mDrawSoftBodyLRAConstraints = false;
+	bool						mDrawSoftBodyPredictedBounds = false;
+	uint32_t	mDrawSoftBodyConstraintColor;
+} JPH_BodyManager_DrawSettings;
 
 typedef struct JPH_IndexedTriangleNoMaterial {
     uint32_t i1;
@@ -484,6 +532,15 @@ typedef struct JPH_ContactSettings              JPH_ContactSettings;
 
 typedef struct JPH_BodyActivationListener       JPH_BodyActivationListener;
 
+typedef struct JPH_Geometry       JPH_Geometry;
+
+typedef void (*JPH_DebugRenderer_DrawLineCallback)(JPH_RVec3* inFrom, JPH_RVec3* inTo, JPH_Color* inColor);
+typedef void (*JPH_DebugRenderer_DrawTriangleCallback)(JPH_RVec3* inV1, JPH_RVec3* inV2, JPH_RVec3* inV3, JPH_Color* inColor, uint32_t inCastShadow);
+typedef void (*JPH_DebugRenderer_DrawText3DCallback)(JPH_RVec3* inPosition, const char* inString, int32_t stringLen, JPH_Color* inColor, float inHeight);
+typedef void (*JPH_DebugRenderer_DrawGeometryCallback)(JPH_RMatrix4x4* inModelMatrix, JPH_AABox* inWorldSpaceBounds, float inLODScaleSq, JPH_Color* inModelColor, uint64_t inGeometryUserData, uint32_t inCullMode, uint32_t inCastShadow, uint32_t inDrawMode);
+typedef void (*JPH_DebugRenderer_CreateTriangleBatchCallback)(const JPH_Triangle* inTriangles, int inTriangleCount, uint64_t* outBatch);
+typedef void (*JPH_DebugRenderer_CreateTriangleBatchIndexedCallback)(const JPH_Vertex* inVertices, int inVertexCount, const uint32_t* inIndices, int inIndexCount, uint64_t* outBatch);
+
 typedef struct JPH_SharedMutex                  JPH_SharedMutex;
 
 typedef struct JPH_BodyLockRead
@@ -523,6 +580,9 @@ typedef struct JPH_CharacterContactSettings {
 typedef struct JPH_CharacterContactListener			JPH_CharacterContactListener;
 typedef struct JPH_CharacterVirtualSettings         JPH_CharacterVirtualSettings; /* Inherics JPH_CharacterBaseSettings */
 typedef struct JPH_CharacterVirtual                 JPH_CharacterVirtual;  /* Inherics JPH_CharacterBase */
+
+typedef struct JPH_TransformedShape JPH_TransformedShape;
+typedef struct JPH_DebugRenderer JPH_DebugRenderer;
 
 typedef void(JPH_API_CALL* JPH_TraceFunc)(const char* mssage);
 typedef JPH_Bool32(JPH_API_CALL* JPH_AssertFailureFunc)(const char* expression, const char* mssage, const char* file, uint32_t line);
@@ -606,6 +666,9 @@ JPH_CAPI void JPH_PhysicsSystem_GetPhysicsSettings(JPH_PhysicsSystem* system, JP
 
 JPH_CAPI void JPH_PhysicsSystem_OptimizeBroadPhase(JPH_PhysicsSystem* system);
 JPH_CAPI JPH_PhysicsUpdateError JPH_PhysicsSystem_Step(JPH_PhysicsSystem* system, float deltaTime, int collisionSteps);
+
+JPH_CAPI void JPH_PhysicsSystem_DrawBodies(JPH_PhysicsSystem* system, JPH_BodyManager_DrawSettings* drawSettings);
+JPH_CAPI void JPH_PhysicsSystem_DrawConstraints(JPH_PhysicsSystem* system);
 
 JPH_CAPI JPH_BodyInterface* JPH_PhysicsSystem_GetBodyInterface(JPH_PhysicsSystem* system);
 JPH_CAPI JPH_BodyInterface* JPH_PhysicsSystem_GetBodyInterfaceNoLock(JPH_PhysicsSystem* system);
@@ -1462,6 +1525,7 @@ JPH_CAPI void JPH_CharacterVirtual_Update(JPH_CharacterVirtual* character, float
 JPH_CAPI void JPH_CharacterVirtual_ExtendedUpdate(JPH_CharacterVirtual* character, float deltaTime,
 	const JPH_ExtendedUpdateSettings* settings, JPH_ObjectLayer layer, JPH_PhysicsSystem* system);
 JPH_CAPI void JPH_CharacterVirtual_RefreshContacts(JPH_CharacterVirtual* character, JPH_ObjectLayer layer, JPH_PhysicsSystem* system);
+JPH_CAPI void JPH_CharacterVirtual_UpdateGroundVelocity(JPH_CharacterVirtual* character);
 
 /* CharacterContactListener */
 typedef struct JPH_CharacterContactListener_Procs {
@@ -1499,5 +1563,15 @@ typedef struct JPH_CharacterContactListener_Procs {
 
 JPH_CAPI JPH_CharacterContactListener* JPH_CharacterContactListener_Create(JPH_CharacterContactListener_Procs procs, void* userData);
 JPH_CAPI void JPH_CharacterContactListener_Destroy(JPH_CharacterContactListener* listener);
+
+JPH_CAPI JPH_DebugRenderer* JPH_DebugRenderer_Create(JPH_DebugRenderer_DrawLineCallback drawLineCallback,
+    JPH_DebugRenderer_DrawTriangleCallback drawTriangleCallback,
+    JPH_DebugRenderer_DrawText3DCallback drawText3DCallback,
+    JPH_DebugRenderer_DrawGeometryCallback drawGeometryCallback,
+    JPH_DebugRenderer_CreateTriangleBatchCallback drawTriangleBatchCallback1,
+    JPH_DebugRenderer_CreateTriangleBatchIndexedCallback drawTriangleBatchCallback2);
+JPH_CAPI void JPH_DebugRenderer_Destroy(JPH_DebugRenderer* renderer);
+
+JPH_CAPI void JPH_Body_SetMassProperties(JPH_Body* bodyID, int32_t inAllowedDOFs, const JPH_MassProperties* massProperties);
 
 #endif /* JOLT_C_H_ */

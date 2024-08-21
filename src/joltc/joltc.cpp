@@ -58,6 +58,7 @@ JPH_SUPPRESS_WARNINGS
 #include "Jolt/Physics/Character/CharacterBase.h"
 #include "Jolt/Physics/Character/CharacterVirtual.h"
 #include "Jolt/Physics/Collision/PhysicsMaterialSimple.h"
+#include "Jolt/Physics/Collision/CollisionDispatch.h"
 
 #include <iostream>
 #include <cstdarg>
@@ -161,6 +162,17 @@ static inline void FromJolt(const JPH::Mat44& matrix, JPH_Matrix4x4* result)
     result->m42 = translation.GetY();
     result->m43 = translation.GetZ();
     result->m44 = 1.0;
+}
+
+static inline void FromJolt(const JPH::Color& vec, JPH_Color* result)
+{
+    result->mU32 = vec.mU32;
+}
+
+static inline void FromJolt(const JPH::AABox& vec, JPH_AABox* result)
+{
+    FromJolt(vec.mMin, &result->min);
+    FromJolt(vec.mMax, &result->max);
 }
 
 #if defined(JPH_DOUBLE_PRECISION)
@@ -612,6 +624,18 @@ JPH_PhysicsUpdateError JPH_PhysicsSystem_Step(JPH_PhysicsSystem* system, float d
     JPH_ASSERT(system);
 
     return static_cast<JPH_PhysicsUpdateError>(system->physicsSystem->Update(deltaTime, collisionSteps, s_TempAllocator, s_JobSystem));
+}
+
+void JPH_PhysicsSystem_DrawBodies(JPH_PhysicsSystem* system, JPH_BodyManager_DrawSettings* drawSettings)
+{
+    JPH_ASSERT(system);
+    system->physicsSystem->DrawBodies(*reinterpret_cast<JPH::BodyManager::DrawSettings*>(drawSettings), DebugRenderer::sInstance);
+}
+
+void JPH_PhysicsSystem_DrawConstraints(JPH_PhysicsSystem* system)
+{
+    JPH_ASSERT(system);
+    system->physicsSystem->DrawConstraints(DebugRenderer::sInstance);
 }
 
 JPH_BodyInterface* JPH_PhysicsSystem_GetBodyInterface(JPH_PhysicsSystem* system)
@@ -5253,6 +5277,12 @@ void JPH_CharacterVirtual_RefreshContacts(JPH_CharacterVirtual* character, JPH_O
     );
 }
 
+void JPH_CharacterVirtual_UpdateGroundVelocity(JPH_CharacterVirtual* character)
+{
+    auto jolt_character = reinterpret_cast<JPH::CharacterVirtual*>(character);
+    jolt_character->UpdateGroundVelocity();
+}
+
 /* CharacterContactListener */
 class ManagedCharacterContactListener final : public JPH::CharacterContactListener
 {
@@ -5371,6 +5401,177 @@ void JPH_CharacterContactListener_Destroy(JPH_CharacterContactListener* listener
 {
 	if (listener)
         delete reinterpret_cast<ManagedCharacterContactListener*>(listener);
+}
+
+JPH_TransformedShape* JPH_Body_GetTransformedShape(const JPH_Body* body)
+{
+    auto joltBody = reinterpret_cast<const JPH::Body*>(body);
+    auto res = joltBody->GetTransformedShape();
+
+    auto ptr = new TransformedShape();
+    *ptr = res;
+
+    return reinterpret_cast<JPH_TransformedShape*>(ptr);
+}
+
+void JPH_Body_ReleaseTransformedShape(JPH_TransformedShape* shape)
+{
+    if (shape)
+    {
+        delete reinterpret_cast<TransformedShape*>(shape);
+    }
+}
+
+struct PrimroseDebugRenderer : DebugRenderer
+{
+    JPH_DebugRenderer_DrawLineCallback drawLineCallback;
+    JPH_DebugRenderer_DrawTriangleCallback drawTriangleCallback;
+    JPH_DebugRenderer_DrawText3DCallback drawText3DCallback;
+    JPH_DebugRenderer_DrawGeometryCallback drawGeometryCallback;
+    JPH_DebugRenderer_CreateTriangleBatchCallback createTriangleBatchCallback;
+    JPH_DebugRenderer_CreateTriangleBatchIndexedCallback createTriangleBatchCallback2;
+
+    PrimroseDebugRenderer(JPH_DebugRenderer_DrawLineCallback drawLineCallback,
+    JPH_DebugRenderer_DrawTriangleCallback drawTriangleCallback,
+    JPH_DebugRenderer_DrawText3DCallback drawText3DCallback,
+    JPH_DebugRenderer_DrawGeometryCallback drawGeometryCallback,
+    JPH_DebugRenderer_CreateTriangleBatchCallback drawTriangleBatchCallback1,
+    JPH_DebugRenderer_CreateTriangleBatchIndexedCallback drawTriangleBatchCallback2)
+    {
+        this->drawLineCallback = drawLineCallback;
+        this->drawTriangleCallback = drawTriangleCallback;
+        this->drawText3DCallback = drawText3DCallback;
+        this->drawGeometryCallback = drawGeometryCallback;
+        this->createTriangleBatchCallback = drawTriangleBatchCallback1;
+        this->createTriangleBatchCallback2 = drawTriangleBatchCallback2;
+        Initialize();
+    }
+
+    class BatchImpl : public RefTargetVirtual
+    {
+    public:
+        JPH_OVERRIDE_NEW_DELETE
+
+        virtual void			AddRef() override			{ ++mRefCount; }
+        virtual void			Release() override			{ if (--mRefCount == 0) delete this; }
+
+        uint64_t UserData;
+
+    private:
+        atomic<uint32>			mRefCount = 0;
+    };
+
+    void DrawLine(RVec3Arg inFrom, RVec3Arg inTo, ColorArg inColor) override
+    {
+        if (drawLineCallback)
+        {
+            JPH_RVec3 from, to;
+            FromJolt(inFrom, &from);
+            FromJolt(inTo, &to);
+            JPH_Color color;
+            FromJolt(inColor, &color);
+            drawLineCallback(&from, &to, &color);
+        }
+    }
+
+    void DrawTriangle(RVec3Arg inV1, RVec3Arg inV2, RVec3Arg inV3, ColorArg inColor, ECastShadow inCastShadow) override
+    {
+        if (drawTriangleCallback)
+        {
+            JPH_RVec3 v1, v2, v3;
+            FromJolt(inV1, &v1);
+            FromJolt(inV2, &v2);
+            FromJolt(inV3, &v3);
+            JPH_Color color;
+            FromJolt(inColor, &color);
+            drawTriangleCallback(&v1, &v2, &v3, &color, static_cast<uint32_t>(inCastShadow));
+        }
+    }
+
+    DebugRenderer::Batch CreateTriangleBatch(const Triangle* inTriangles, int inTriangleCount) override
+    {
+        BatchImpl *batch = new BatchImpl;
+        if (inTriangles == nullptr || inTriangleCount == 0)
+            return batch;
+
+        createTriangleBatchCallback(reinterpret_cast<const JPH_Triangle*>(inTriangles), inTriangleCount, &batch->UserData);
+
+        return batch;
+    }
+
+    DebugRenderer::Batch CreateTriangleBatch(const DebugRenderer::Vertex* inVertices, int inVertexCount, const uint32* inIndices, int inIndexCount) override
+    {
+        BatchImpl *batch = new BatchImpl;
+        if (inVertices == nullptr || inVertexCount == 0 || inIndices == nullptr || inIndexCount == 0)
+            return batch;
+
+        createTriangleBatchCallback2(reinterpret_cast<const JPH_Vertex*>(inVertices), inVertexCount, inIndices, inIndexCount, &batch->UserData);
+
+        return batch;
+    }
+
+    void DrawGeometry(RMat44Arg inModelMatrix, const AABox& inWorldSpaceBounds, float inLODScaleSq, ColorArg inModelColor, const GeometryRef& inGeometry, ECullMode inCullMode, ECastShadow inCastShadow, EDrawMode inDrawMode) override
+    {
+        // Figure out which LOD to use
+        const LOD *lod = inGeometry->mLODs.data();
+        //if (mCameraPosSet)
+        //    lod = &inGeometry->GetLOD(Vec3(mCameraPos), inWorldSpaceBounds, inLODScaleSq);
+
+        // Draw the batch
+        const BatchImpl *batch = static_cast<const BatchImpl *>(lod->mTriangleBatch.GetPtr());
+
+        if (drawGeometryCallback)
+        {
+            JPH_RMatrix4x4 modelMatrix;
+            FromJolt(inModelMatrix, &modelMatrix);
+            JPH_Color modelColor;
+            FromJolt(inModelColor, &modelColor);
+            JPH_AABox inBounds;
+            FromJolt(inWorldSpaceBounds, &inBounds);
+            drawGeometryCallback(&modelMatrix, &inBounds, inLODScaleSq, &modelColor, batch->UserData, static_cast<uint32_t>(inCullMode), static_cast<uint32_t>(inCastShadow), static_cast<uint32_t>(inDrawMode));
+        }
+    }
+
+    void DrawText3D(RVec3Arg inPosition, const string_view& inString, ColorArg inColor, float inHeight) override
+    {
+        if (drawText3DCallback)
+        {
+            JPH_RVec3 position;
+            FromJolt(inPosition, &position);
+            JPH_Color color;
+            FromJolt(inColor, &color);
+            drawText3DCallback(&position, inString.data(), inString.size(), &color, inHeight);
+        }
+    }
+};
+
+JPH_DebugRenderer* JPH_DebugRenderer_Create(JPH_DebugRenderer_DrawLineCallback drawLineCallback,
+    JPH_DebugRenderer_DrawTriangleCallback drawTriangleCallback,
+    JPH_DebugRenderer_DrawText3DCallback drawText3DCallback,
+    JPH_DebugRenderer_DrawGeometryCallback drawGeometryCallback,
+    JPH_DebugRenderer_CreateTriangleBatchCallback drawTriangleBatchCallback1,
+    JPH_DebugRenderer_CreateTriangleBatchIndexedCallback drawTriangleBatchCallback2)
+{
+    const auto primroseRenderer = new PrimroseDebugRenderer(drawLineCallback, drawTriangleCallback, drawText3DCallback, drawGeometryCallback, drawTriangleBatchCallback1, drawTriangleBatchCallback2);
+
+    return reinterpret_cast<JPH_DebugRenderer*>(primroseRenderer);
+}
+
+void JPH_DebugRenderer_Destroy(JPH_DebugRenderer* renderer)
+{
+    if (renderer)
+    {
+        delete reinterpret_cast<PrimroseDebugRenderer*>(renderer);
+    }
+}
+
+void JPH_Body_SetMassProperties(JPH_Body* inBodyID, int32_t inAllowedDOFs, const JPH_MassProperties* inMassProperties)
+{
+    auto joltBody = reinterpret_cast<JPH::Body*>(inBodyID);
+    auto massProperties = ToJolt(inMassProperties);
+    Body &body = *joltBody;
+    const auto motionProperties = body.GetMotionPropertiesUnchecked();
+    motionProperties->SetMassProperties(static_cast<EAllowedDOFs>(inAllowedDOFs), massProperties);
 }
 
 JPH_SUPPRESS_WARNING_POP
