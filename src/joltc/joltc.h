@@ -486,6 +486,7 @@ typedef struct JPH_MeshShape                    JPH_MeshShape;
 typedef struct JPH_HeightFieldShape             JPH_HeightFieldShape;
 typedef struct JPH_DecoratedShape               JPH_DecoratedShape;
 typedef struct JPH_RotatedTranslatedShape       JPH_RotatedTranslatedShape;
+typedef struct JPH_ScaledShape                  JPH_ScaledShape;
 typedef struct JPH_OffsetCenterOfMassShape      JPH_OffsetCenterOfMassShape;
 
 typedef struct JPH_BodyCreationSettings         JPH_BodyCreationSettings;
@@ -812,6 +813,8 @@ JPH_CAPI JPH_RotatedTranslatedShape* JPH_RotatedTranslatedShapeSettings_CreateSh
 JPH_CAPI JPH_RotatedTranslatedShape* JPH_RotatedTranslatedShape_Create(const JPH_Vec3* position, const JPH_Quat* rotation, const JPH_Shape* shape);
 JPH_CAPI void JPH_RotatedTranslatedShape_GetPosition(const JPH_RotatedTranslatedShape* shape, JPH_Vec3* position);
 JPH_CAPI void JPH_RotatedTranslatedShape_GetRotation(const JPH_RotatedTranslatedShape* shape, JPH_Quat* rotation);
+
+JPH_CAPI JPH_ScaledShape* JPH_ScaledShape_Create(const JPH_Vec3* scale, const JPH_Shape* shape);
 
 /* OffsetCenterOfMassShape */
 JPH_CAPI JPH_OffsetCenterOfMassShapeSettings* JPH_OffsetCenterOfMassShapeSettings_Create(const JPH_Vec3* offset, const JPH_ShapeSettings* shapeSettings);

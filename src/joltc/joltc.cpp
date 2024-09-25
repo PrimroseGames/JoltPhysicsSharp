@@ -59,6 +59,7 @@ JPH_SUPPRESS_WARNINGS
 #include "Jolt/Physics/Character/CharacterVirtual.h"
 #include "Jolt/Physics/Collision/PhysicsMaterialSimple.h"
 #include "Jolt/Physics/Collision/CollisionDispatch.h"
+#include "Jolt/Physics/Collision/Shape/ScaledShape.h"
 
 #include <iostream>
 #include <cstdarg>
@@ -1425,6 +1426,16 @@ JPH_RotatedTranslatedShape* JPH_RotatedTranslatedShape_Create(const JPH_Vec3* po
     rotatedTranslatedShape->AddRef();
 
     return reinterpret_cast<JPH_RotatedTranslatedShape*>(rotatedTranslatedShape);
+}
+
+JPH_ScaledShape* JPH_ScaledShape_Create(const JPH_Vec3* scale, const JPH_Shape* shape)
+{
+    auto jolt_shape = reinterpret_cast<const JPH::Shape*>(shape);
+
+    auto scaledShape = new JPH::ScaledShape(jolt_shape, ToJolt(scale));
+    scaledShape->AddRef();
+
+    return reinterpret_cast<JPH_ScaledShape*>(scaledShape);
 }
 
 void JPH_RotatedTranslatedShape_GetPosition(const JPH_RotatedTranslatedShape* shape, JPH_Vec3* position)
